@@ -14,27 +14,135 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore game images and launcher icon
+      - name: Reconstruct Android project correctly
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p app/src/main/assets/game/assets
-          mkdir -p app/src/main/res/drawable
-          base64 -d payload/peach.b64 > app/src/main/assets/game/assets/peach.jpg
-          base64 -d payload/hope.b64 > app/src/main/assets/game/assets/hope.jpg
-          base64 -d payload/dreamy.b64 > app/src/main/assets/game/assets/dreamy.jpg
-          base64 -d payload/xiaotaiyang.b64 > app/src/main/assets/game/assets/xiaotaiyang.jpg
-          base64 -d payload/auckland_bg.b64 > app/src/main/assets/game/assets/auckland_bg.png
-          base64 -d payload/icon.b64 > app/src/main/res/drawable/ic_launcher.jpg
-          test -s app/src/main/assets/game/assets/peach.jpg
-          test -s app/src/main/assets/game/assets/hope.jpg
-          test -s app/src/main/assets/game/assets/dreamy.jpg
-          test -s app/src/main/assets/game/assets/xiaotaiyang.jpg
-          test -s app/src/main/assets/game/assets/auckland_bg.png
-          test -s app/src/main/res/drawable/ic_launcher.jpg
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+          raw = bytearray()
+          chunks = sorted(Path("bundle").glob("chunk_*.b64"))
+          if not chunks:
+              raise SystemExit("No bundle chunks found")
+          for p in chunks:
+              data = "".join(p.read_text().split())
+              part = base64.b64decode(data, validate=True)
+              print(p, "->", len(part), "bytes")
+              raw.extend(part)
+          Path("/tmp/project.zip").write_bytes(raw)
+          print("reconstructed zip bytes:", len(raw))
+          PY
+          unzip -t /tmp/project.zip
+          rm -rf /tmp/appsrc
+          mkdir -p /tmp/appsrc
+          unzip -q /tmp/project.zip -d /tmp/appsrc
+          PROJECT="$(find /tmp/appsrc -name settings.gradle -printf '%h\n' | head -n 1)"
+          test -n "$PROJECT"
+          echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
+          echo "Project: $PROJECT"
+          test -s "$PROJECT/app/src/main/assets/game/index.html"
+          grep -q "Auckland Flappy Flock" "$PROJECT/app/src/main/assets/game/index.html"
+          grep -q "requestAnimationFrame" "$PROJECT/app/src/main/assets/game/index.html"
+          echo "index.html present: $(wc -c < "$PROJECT/app/src/main/assets/game/index.html") bytes"
+
+      - name: Restore game images and fix launcher icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$PROJECT/app/src/main/assets/game/assets"
+          mkdir -p "$PROJECT/app/src/main/res/drawable"
+
+          base64 -d payload/peach.b64 > "$PROJECT/app/src/main/assets/game/assets/peach.jpg"
+          base64 -d payload/hope.b64 > "$PROJECT/app/src/main/assets/game/assets/hope.jpg"
+          base64 -d payload/dreamy.b64 > "$PROJECT/app/src/main/assets/game/assets/dreamy.jpg"
+          base64 -d payload/xiaotaiyang.b64 > "$PROJECT/app/src/main/assets/game/assets/xiaotaiyang.jpg"
+          base64 -d payload/auckland_bg.b64 > "$PROJECT/app/src/main/assets/game/assets/auckland_bg.png"
+          base64 -d payload/icon.b64 > /tmp/icon-source.jpg
+
+          python3 -m pip install --quiet pillow
+          python3 - <<'PY'
+          import os
+          from collections import deque
+          from PIL import Image
+
+          project = os.environ["PROJECT"]
+          src = "/tmp/icon-source.jpg"
+          dst = os.path.join(project, "app/src/main/res/drawable/ic_launcher.png")
+
+          im = Image.open(src).convert("RGB")
+          w, h = im.size
+          px = im.load()
+          seen = bytearray(w*h)
+          q = deque()
+
+          def edge_white(x, y):
+              r, g, b = px[x, y]
+              return r >= 205 and g >= 205 and b >= 205 and max(r,g,b)-min(r,g,b) <= 45
+
+          for x in range(w):
+              for y in (0, h-1):
+                  if edge_white(x,y):
+                      i=y*w+x
+                      if not seen[i]:
+                          seen[i]=1; q.append((x,y))
+          for y in range(h):
+              for x in (0, w-1):
+                  if edge_white(x,y):
+                      i=y*w+x
+                      if not seen[i]:
+                          seen[i]=1; q.append((x,y))
+
+          while q:
+              x,y=q.popleft()
+              for nx,ny in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)):
+                  if 0 <= nx < w and 0 <= ny < h:
+                      i=ny*w+nx
+                      if not seen[i] and edge_white(nx,ny):
+                          seen[i]=1; q.append((nx,ny))
+
+          fill=(93,201,240)
+          for y in range(h):
+              for x in range(w):
+                  if seen[y*w+x]:
+                      px[x,y]=fill
+
+          if im.size != (384,384):
+              im = im.resize((384,384), Image.Resampling.LANCZOS)
+          im.save(dst, optimize=True)
+          print("launcher icon:", dst, os.path.getsize(dst), "bytes")
+          PY
+
+          # Use the corrected full-bleed launcher art and remove the broken adaptive-icon reference.
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          project = Path(os.environ["PROJECT"])
+          manifest = project / "app/src/main/AndroidManifest.xml"
+          s = manifest.read_text()
+          s = s.replace("@mipmap/ic_launcher", "@drawable/ic_launcher")
+          manifest.write_text(s)
+
+          adaptive = project / "app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml"
+          if adaptive.exists():
+              adaptive.unlink()
+
+          gradle = project / "app/build.gradle"
+          g = gradle.read_text()
+          g = g.replace("versionCode 1", "versionCode 2")
+          g = g.replace("versionName '1.0'", "versionName '1.0.1'")
+          gradle.write_text(g)
+          PY
+
+          test -s "$PROJECT/app/src/main/assets/game/assets/peach.jpg"
+          test -s "$PROJECT/app/src/main/assets/game/assets/hope.jpg"
+          test -s "$PROJECT/app/src/main/assets/game/assets/dreamy.jpg"
+          test -s "$PROJECT/app/src/main/assets/game/assets/xiaotaiyang.jpg"
+          test -s "$PROJECT/app/src/main/assets/game/assets/auckland_bg.png"
+          test -s "$PROJECT/app/src/main/res/drawable/ic_launcher.png"
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -54,20 +162,38 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build APK
+        working-directory: ${{ env.PROJECT }}
         run: gradle assembleDebug --no-daemon
+
+      - name: Validate APK contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find "$PROJECT/app/build/outputs/apk/debug" -name '*-debug.apk' | head -n 1)"
+          test -n "$APK"
+          echo "APK=$APK" >> "$GITHUB_ENV"
+          unzip -l "$APK" | tee /tmp/apk-list.txt
+          grep -q 'assets/game/index.html' /tmp/apk-list.txt
+          grep -q 'assets/game/assets/peach.jpg' /tmp/apk-list.txt
+          grep -q 'assets/game/assets/hope.jpg' /tmp/apk-list.txt
+          grep -q 'assets/game/assets/dreamy.jpg' /tmp/apk-list.txt
+          grep -q 'assets/game/assets/xiaotaiyang.jpg' /tmp/apk-list.txt
+          grep -q 'assets/game/assets/auckland_bg.png' /tmp/apk-list.txt
+          grep -q 'res/drawable/ic_launcher.png' /tmp/apk-list.txt
+          unzip -p "$APK" assets/game/index.html | grep -q 'Auckland Flappy Flock'
+          unzip -p "$APK" assets/game/index.html | grep -q 'requestAnimationFrame'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | head -n 8
 
       - name: Rename APK
         shell: bash
         run: |
           set -e
-          APK="$(find app/build/outputs/apk/debug -name '*-debug.apk' | head -n 1)"
-          test -n "$APK"
-          cp "$APK" Auckland-Flappy-Flock.apk
-          ls -lh Auckland-Flappy-Flock.apk
+          cp "$APK" Auckland-Flappy-Flock-v1.0.1.apk
+          ls -lh Auckland-Flappy-Flock-v1.0.1.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Auckland-Flappy-Flock-APK
-          path: Auckland-Flappy-Flock.apk
+          name: Auckland-Flappy-Flock-v1.0.1-APK
+          path: Auckland-Flappy-Flock-v1.0.1.apk
           retention-days: 30
