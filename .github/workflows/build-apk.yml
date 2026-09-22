@@ -14,22 +14,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct compact Android project
+      - name: Restore game images and launcher icon
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import base64
-          parts = [p.read_text().strip() for p in sorted(Path("compact").glob("chunk_*.b64"))]
-          data = "".join(parts)
-          raw = base64.b64decode(data, validate=False)
-          Path("/tmp/project.zip").write_bytes(raw)
-          print("decoded bytes:", len(raw))
-          PY
-          unzip -t /tmp/project.zip
-          rm -rf /tmp/appsrc
-          mkdir -p /tmp/appsrc
-          unzip -q /tmp/project.zip -d /tmp/appsrc
+          set -euo pipefail
+          mkdir -p app/src/main/assets/game/assets
+          mkdir -p app/src/main/res/drawable
+          base64 -d payload/peach.b64 > app/src/main/assets/game/assets/peach.jpg
+          base64 -d payload/hope.b64 > app/src/main/assets/game/assets/hope.jpg
+          base64 -d payload/dreamy.b64 > app/src/main/assets/game/assets/dreamy.jpg
+          base64 -d payload/xiaotaiyang.b64 > app/src/main/assets/game/assets/xiaotaiyang.jpg
+          base64 -d payload/auckland_bg.b64 > app/src/main/assets/game/assets/auckland_bg.png
+          base64 -d payload/icon.b64 > app/src/main/res/drawable/ic_launcher.jpg
+          test -s app/src/main/assets/game/assets/peach.jpg
+          test -s app/src/main/assets/game/assets/hope.jpg
+          test -s app/src/main/assets/game/assets/dreamy.jpg
+          test -s app/src/main/assets/game/assets/xiaotaiyang.jpg
+          test -s app/src/main/assets/game/assets/auckland_bg.png
+          test -s app/src/main/res/drawable/ic_launcher.jpg
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -40,7 +42,9 @@ jobs:
       - name: Install Android SDK packages
         shell: bash
         run: |
+          set -e
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)"
+          echo "Using $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
 
@@ -49,23 +53,17 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Locate Android project
-        id: locate
-        shell: bash
-        run: |
-          PROJECT="$(find /tmp/appsrc -maxdepth 3 -name settings.gradle -printf '%h\n' | head -n 1)"
-          echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
-          echo "Project: $PROJECT"
-
       - name: Build APK
-        working-directory: ${{ steps.locate.outputs.project }}
         run: gradle assembleDebug --no-daemon
 
       - name: Rename APK
         shell: bash
         run: |
-          APK="$(find "${{ steps.locate.outputs.project }}" -path '*/build/outputs/apk/debug/*-debug.apk' | head -n 1)"
+          set -e
+          APK="$(find app/build/outputs/apk/debug -name '*-debug.apk' | head -n 1)"
+          test -n "$APK"
           cp "$APK" Auckland-Flappy-Flock.apk
+          ls -lh Auckland-Flappy-Flock.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
