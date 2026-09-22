@@ -14,6 +14,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Reconstruct compact Android project
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+          parts = [p.read_text().strip() for p in sorted(Path("compact").glob("chunk_*.b64"))]
+          data = "".join(parts)
+          raw = base64.b64decode(data, validate=False)
+          Path("/tmp/project.zip").write_bytes(raw)
+          print("decoded bytes:", len(raw))
+          PY
+          unzip -t /tmp/project.zip
+          rm -rf /tmp/appsrc
+          mkdir -p /tmp/appsrc
+          unzip -q /tmp/project.zip -d /tmp/appsrc
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -23,9 +40,7 @@ jobs:
       - name: Install Android SDK packages
         shell: bash
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)"
-          echo "Using $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
 
@@ -34,11 +49,23 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Locate Android project
+        id: locate
+        shell: bash
+        run: |
+          PROJECT="$(find /tmp/appsrc -maxdepth 3 -name settings.gradle -printf '%h\n' | head -n 1)"
+          echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
+          echo "Project: $PROJECT"
+
       - name: Build APK
+        working-directory: ${{ steps.locate.outputs.project }}
         run: gradle assembleDebug --no-daemon
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Auckland-Flappy-Flock.apk
+        shell: bash
+        run: |
+          APK="$(find "${{ steps.locate.outputs.project }}" -path '*/build/outputs/apk/debug/*-debug.apk' | head -n 1)"
+          cp "$APK" Auckland-Flappy-Flock.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
