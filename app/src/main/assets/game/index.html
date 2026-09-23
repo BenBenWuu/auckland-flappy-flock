@@ -820,71 +820,144 @@
   }
 
   function drawAucklandBackdrop() {
-    const bgBottom = GROUND_Y + 2;
-    if (backgroundPhoto.complete && backgroundPhoto.naturalWidth) {
-      const iw = backgroundPhoto.naturalWidth;
-      const ih = backgroundPhoto.naturalHeight;
-      const scale = Math.max(W / iw, bgBottom / ih);
-      const sw = W / scale;
-      const sh = bgBottom / scale;
-      const sx = Math.max(0, (iw - sw) * 0.52);
-      const sy = Math.max(0, (ih - sh) * 0.28);
-      ctx.drawImage(backgroundPhoto, sx, sy, sw, sh, 0, 0, W, bgBottom);
-    } else {
-      const fallback = ctx.createLinearGradient(0, 0, 0, bgBottom);
-      fallback.addColorStop(0, '#8ad9ff');
-      fallback.addColorStop(1, '#dff8ff');
-      ctx.fillStyle = fallback;
-      ctx.fillRect(0, 0, W, bgBottom);
-    }
+    // Purpose-built pixel Auckland scene. No external photo dependency.
+    // Composition: Rangitoto horizon -> harbour -> CBD -> Sky Tower -> sailboat -> pōhutukawa -> foreground bush.
+    const horizonY = 300;
+    const waterTop = 350;
+    const foliageY = 515;
 
-    // soften the photo into game art
-    const wash = ctx.createLinearGradient(0, 0, 0, bgBottom);
-    wash.addColorStop(0, 'rgba(255,255,255,0.14)');
-    wash.addColorStop(0.58, 'rgba(255,248,235,0.08)');
-    wash.addColorStop(1, 'rgba(196, 237, 255, 0.20)');
-    ctx.fillStyle = wash;
-    ctx.fillRect(0, 0, W, bgBottom);
-
-    // extra cartoon clouds on top so the photo feels more playful
-    ctx.fillStyle = 'rgba(255,255,255,.72)';
-    cloud(42 - scroll * 0.06 % 430, 76, 14);
-    cloud(198 - scroll * 0.08 % 430, 60, 18);
-    cloud(320 - scroll * 0.05 % 430, 98, 16);
-
-    // a tiny ferry and sparkles to keep some motion and Auckland flavour
-    const waterY = 450;
-    const fx = ((290 - scroll * 0.28) % (W + 80) + (W + 80)) % (W + 80) - 40;
-    ctx.fillStyle = 'rgba(27,72,92,0.75)';
-    ctx.fillRect(fx - 3, waterY + 17, 30, 3);
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(fx, waterY + 9, 22, 7);
-    ctx.fillStyle = '#ef6a54';
-    ctx.fillRect(fx + 5, waterY + 4, 9, 5);
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    for (let i = 0; i < 5; i++) {
-      const sx = ((25 + i * 72 - scroll * 0.18) % (W + 40) + (W + 40)) % (W + 40) - 20;
-      ctx.fillRect(sx, 478 + (i % 2) * 4, 18, 2);
-    }
-
-    // Pixel-art foreground greenery, inspired by the icon and the polished mockup.
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    const foliageY = 518;
-    const greens = ['#2a875a','#3aa866','#55bf69','#26794f'];
-    for (let i=0;i<25;i++) {
-      const x = ((i*19 - scroll*.08) % (W+30) + (W+30)) % (W+30) - 15;
-      const h = 12 + ((i*7)%19);
-      ctx.fillStyle = greens[i % greens.length];
-      ctx.fillRect(x, foliageY + 25 - h, 14 + (i%3)*4, h);
-      if (i%4===0) {
-        ctx.fillStyle='#d94f4f';
-        ctx.fillRect(x+5, foliageY+14-h, 4,4);
-        ctx.fillRect(x+10, foliageY+11-h, 3,3);
+
+    // Distant Rangitoto / Waitematā horizon.
+    ctx.fillStyle = '#6db9c6';
+    ctx.beginPath();
+    ctx.moveTo(0, 318);
+    ctx.lineTo(42, 309);
+    ctx.lineTo(88, 304);
+    ctx.lineTo(128, 307);
+    ctx.lineTo(168, 300);
+    ctx.lineTo(202, 284);
+    ctx.lineTo(226, 276);
+    ctx.lineTo(248, 286);
+    ctx.lineTo(273, 298);
+    ctx.lineTo(318, 303);
+    ctx.lineTo(W, 305);
+    ctx.lineTo(W, waterTop);
+    ctx.lineTo(0, waterTop);
+    ctx.closePath();
+    ctx.fill();
+
+    // Harbour: layered turquoise water bands for the bright reference look.
+    const water = ctx.createLinearGradient(0, waterTop, 0, foliageY + 20);
+    water.addColorStop(0, '#149bd7');
+    water.addColorStop(.45, '#118dc8');
+    water.addColorStop(1, '#087eb6');
+    ctx.fillStyle = water;
+    ctx.fillRect(0, waterTop, W, foliageY - waterTop + 24);
+
+    ctx.fillStyle = 'rgba(255,255,255,.42)';
+    for (let i=0;i<13;i++) {
+      const wx = ((i*43 - scroll*.10) % (W+55) + (W+55)) % (W+55) - 24;
+      const wy = waterTop + 34 + (i%6)*25;
+      ctx.fillRect(wx, wy, 18 + (i%3)*7, 2);
+    }
+
+    // CBD skyline block shapes.
+    const skyline = [
+      [18,326,24,44,'#7ec9db'], [44,312,21,58,'#55a9ca'], [68,319,31,51,'#6ab7d2'],
+      [102,300,28,70,'#468fb4'], [133,322,26,48,'#75bdd2'], [162,309,30,61,'#4f9fbd'],
+      [196,319,20,51,'#6ab4c9'], [220,293,31,77,'#3e85aa'], [255,315,25,55,'#73bbcf'],
+      [286,306,29,64,'#4c96b6'], [320,317,22,53,'#73b9ca'], [347,299,31,71,'#4b8fae']
+    ];
+    skyline.forEach(([x,y,w,h,col],i)=>{
+      ctx.fillStyle=col; ctx.fillRect(x,y,w,h);
+      ctx.fillStyle='rgba(255,239,188,.80)';
+      for(let yy=y+8; yy<y+h-5; yy+=11){
+        for(let xx=x+5; xx<x+w-4; xx+=9){
+          if(((xx+yy+i*7)%3)!==0) ctx.fillRect(xx,yy,3,4);
+        }
+      }
+      ctx.fillStyle='rgba(23,70,95,.45)';
+      ctx.fillRect(x+w-3,y,3,h);
+    });
+
+    // Sky Tower, the strong Auckland anchor from the reference.
+    const tx = 278;
+    ctx.fillStyle='#315f7c';
+    ctx.fillRect(tx-3,192,6,142);       // mast
+    ctx.fillRect(tx-1,157,2,40);        // antenna
+    ctx.fillStyle='#173f5c';
+    ctx.fillRect(tx-7,228,14,105);      // shaft
+    ctx.fillStyle='#d7e7ec';
+    ctx.fillRect(tx-5,232,10,98);
+    ctx.fillStyle='#315f7c';
+    ctx.fillRect(tx-6,252,12,12);
+    ctx.fillStyle='#173f5c';
+    ctx.fillRect(tx-17,222,34,7);       // observation deck dark edge
+    ctx.fillStyle='#d9eef5';
+    ctx.fillRect(tx-14,215,28,9);
+    ctx.fillStyle='#173f5c';
+    ctx.fillRect(tx-10,208,20,8);
+    ctx.fillStyle='#eef9fb';
+    ctx.fillRect(tx-5,194,10,14);
+
+    // Waterfront / wharf strip.
+    ctx.fillStyle='#225f75';
+    ctx.fillRect(0,365,W,8);
+    ctx.fillStyle='#d5eff2';
+    ctx.fillRect(0,362,W,3);
+
+    // White Auckland sailboat.
+    const sx = 105 + Math.sin(time*.15)*2;
+    const sy = 435;
+    ctx.fillStyle='#f6fcff';
+    ctx.beginPath();
+    ctx.moveTo(sx,sy-62); ctx.lineTo(sx,sy); ctx.lineTo(sx-31,sy); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#fff8df';
+    ctx.beginPath();
+    ctx.moveTo(sx+3,sy-54); ctx.lineTo(sx+3,sy); ctx.lineTo(sx+27,sy); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#173f5c';
+    ctx.fillRect(sx-31,sy,61,5);
+    ctx.fillRect(sx,sy-66,2,68);
+
+    // Small ferry for life in the harbour.
+    const fx = ((334 - scroll*.18) % (W+90) + (W+90)) % (W+90) - 45;
+    ctx.fillStyle='#163e58'; ctx.fillRect(fx-4,405,38,4);
+    ctx.fillStyle='#fff'; ctx.fillRect(fx,393,29,12);
+    ctx.fillStyle='#ef6652'; ctx.fillRect(fx+8,386,12,7);
+
+    // Pōhutukawa corners: red flowers + dark leaves.
+    function pohutukawa(px, py, flip=1){
+      ctx.fillStyle='#256c46';
+      const leafPts=[[0,0],[10,-7],[20,-2],[28,-12],[39,-4],[50,-10],[61,1],[48,7],[36,5],[23,12],[10,8]];
+      leafPts.forEach(([dx,dy])=>ctx.fillRect(px+flip*dx,py+dy,12,7));
+      ctx.fillStyle='#e54639';
+      const flowers=[[8,-5],[16,-14],[25,-8],[32,-18],[41,-11],[50,-3],[22,2],[38,0]];
+      flowers.forEach(([dx,dy])=>{
+        const x=px+flip*dx, y=py+dy;
+        ctx.fillRect(x,y,5,5); ctx.fillRect(x-4,y+2,4,4); ctx.fillRect(x+4,y+1,4,4);
+      });
+    }
+    pohutukawa(2,342,1);
+    pohutukawa(W-3,458,-1);
+
+    // Dense pixel foreground greenery like the reference mockup.
+    const greens=['#1e6f47','#2f8c4d','#42a85a','#5bbb61','#167043','#3d9950'];
+    for(let i=0;i<32;i++){
+      const x=((i*15 - scroll*.05)%(W+30)+(W+30))%(W+30)-15;
+      const h=12+((i*11)%34);
+      ctx.fillStyle=greens[i%greens.length];
+      ctx.fillRect(x, foliageY+27-h, 17+(i%4)*4, h);
+      if(i%6===0){
+        ctx.fillStyle='#d9453d';
+        ctx.fillRect(x+5,foliageY+18-h,5,5);
+        ctx.fillRect(x+10,foliageY+14-h,4,4);
       }
     }
-    ctx.fillStyle='rgba(19,102,81,.88)';
-    ctx.fillRect(0, foliageY+24, W, 24);
+    ctx.fillStyle='#185f42'; ctx.fillRect(0,foliageY+25,W,22);
+    ctx.fillStyle='#4aaa55'; ctx.fillRect(0,foliageY+23,W,5);
+
     ctx.restore();
   }
 
