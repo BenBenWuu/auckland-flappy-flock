@@ -47,7 +47,7 @@
   .bird-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin:14px 0 10px; }
   .bird-card { position:relative; border:3px solid #173244; background:#fff; border-radius:16px; padding:8px; box-shadow:0 4px 0 rgba(23,50,68,.32); text-align:left; color:#173244; }
   .bird-card.selected { outline:4px solid #ffcc4d; background:#fff8d8; }
-  .bird-photo { width:100%; aspect-ratio:1.35/1; object-fit:cover; border:2px solid #173244; border-radius:11px; background:#dbeef5; display:block; }
+  .bird-photo { width:100%; aspect-ratio:1.35/1; object-fit:contain; border:0; border-radius:11px; background:#fffdf5; display:block; padding:4px; }
   .bird-name { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-top:7px; font-size:17px; font-weight:900; }
   .bird-best { color:#547282; font-size:11px; font-weight:800; }
   .hint { font-size:12px; background:#eaf8fb; border:2px solid #badce7; border-radius:12px; padding:8px 10px; color:#315466; text-align:center; }
@@ -134,9 +134,9 @@
     content:"";
     position:absolute;
     inset:0;
-    background:url('assets/auckland_bg.png') center 48% / cover no-repeat;
-    filter:grayscale(.25) saturate(.65) brightness(1.25);
-    opacity:.16;
+    background:
+      linear-gradient(90deg, transparent 0 8%, rgba(65,139,176,.18) 8% 13%, transparent 13% 19%, rgba(65,139,176,.14) 19% 25%, transparent 25% 34%, rgba(65,139,176,.20) 34% 40%, transparent 40% 49%, rgba(65,139,176,.14) 49% 55%, transparent 55% 65%, rgba(65,139,176,.18) 65% 72%, transparent 72% 82%, rgba(65,139,176,.15) 82% 89%, transparent 89%);
+    opacity:.9;
   }
   .gameover-hero::after {
     content:"";
@@ -238,7 +238,7 @@
     grid-template-rows:minmax(0,1fr) auto auto;
     padding:6px;
   }
-  #selectScreen .bird-photo { width:100%; height:100%; min-height:0; aspect-ratio:auto; object-fit:cover; }
+  #selectScreen .bird-photo { width:100%; height:100%; min-height:0; aspect-ratio:auto; object-fit:contain; background:#fffdf5; padding:4px; }
   #selectScreen .bird-name { margin-top:4px; font-size:clamp(13px,1.9vh,16px); }
   #selectScreen .bird-best { font-size:clamp(9px,1.35vh,11px); }
   #selectScreen .game-btn { flex:0 0 auto; padding:8px 10px; }
@@ -415,22 +415,22 @@
 
   const birds = [
     {
-      id:'peach', name:'Peach', file:'assets/peach.jpg', sprite:'assets/sprites/peach.png', css:'peach-photo',
+      id:'peach', name:'Peach', file:'assets/sprites/peach.png', sprite:'assets/sprites/peach.png', css:'peach-photo',
       palette:{body:'#f6d84a', belly:'#ffe67d', head:'#ffc18e', forehead:'#ea4a43', wing:'#d0bf42', beak:'#efc78d', tail:'#e6d56d', cheek:'#f8a0a2'},
       type:'lovebird'
     },
     {
-      id:'hope', name:'Hope', file:'assets/hope.jpg', sprite:'assets/sprites/hope.png', css:'hope-photo',
+      id:'hope', name:'Hope', file:'assets/sprites/hope.png', sprite:'assets/sprites/hope.png', css:'hope-photo',
       palette:{body:'#94dff1', belly:'#b9eef9', head:'#f5fbff', stripe:'#24364a', wing:'#5cbfd7', cheek:'#445fe1', beak:'#d7c24b', tail:'#9ccadd'},
       type:'budgieBlue'
     },
     {
-      id:'dreamy', name:'Dreamy', file:'assets/dreamy.jpg', sprite:'assets/sprites/dreamy.png', css:'dreamy-photo',
+      id:'dreamy', name:'Dreamy', file:'assets/sprites/dreamy.png', sprite:'assets/sprites/dreamy.png', css:'dreamy-photo',
       palette:{body:'#edf8ff', belly:'#bbe7f6', head:'#ffffff', stripe:'#2d3645', wing:'#d8f0fb', cheek:'#90b6d8', beak:'#f0ca4a', tail:'#d5ebf6'},
       type:'budgieWhite'
     },
     {
-      id:'sun', name:'Sunshine', file:'assets/xiaotaiyang.jpg', sprite:'assets/sprites/sunshine.png', css:'sun-photo',
+      id:'sun', name:'Sunshine', file:'assets/sprites/sunshine.png', sprite:'assets/sprites/sunshine.png', css:'sun-photo',
       palette:{body:'#55b86e', belly:'#a6d55d', head:'#2e4659', stripe:'#d8d6c0', wing:'#17975a', red:'#de5740', beak:'#c9b087', tail:'#7b3f2d'},
       type:'conure'
     }
@@ -468,7 +468,7 @@
   const muteBtn = document.getElementById('muteBtn');
 
   const backgroundPhoto = new Image();
-  backgroundPhoto.src = 'assets/auckland_bg.png';
+  // Android uses the built-in Auckland pixel-art scene behind gameplay.
 
   birds.forEach(b => {
     b.spriteImage = new Image();
